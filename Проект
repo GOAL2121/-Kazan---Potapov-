@@ -1,1 +1,426 @@
+import pygame
+import random
 
+pygame.init()
+
+WIDTH, HEIGHT = 600, 600
+GRID_SIZE = 30
+GRID_WIDTH = 10
+GRID_HEIGHT = 20
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+CYAN = (0, 255, 255)
+YELLOW = (255, 255, 0)
+MAGENTA = (255, 0, 255)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+ORANGE = (255, 165, 0)
+
+SHAPES = [
+    [[1, 1, 1, 1]], [[1, 1, 1], [0, 1, 0]], [[1, 1], [1, 1]],
+    [[1, 1, 0], [0, 1, 1]], [[0, 1, 1], [1, 1, 0]], [[1, 1, 1], [1, 0, 0]], [[1, 1, 1], [0, 0, 1]]
+]
+COLORS = [CYAN, MAGENTA, YELLOW, GREEN, RED, BLUE, ORANGE]
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Игры")
+clock = pygame.time.Clock()
+font = pygame.font.SysFont("Arial", 30)
+
+# Экран меню
+def draw_menu(selected):
+    screen.fill(BLACK)
+    title = font.render("Выберите игру", True, WHITE)
+    games = ["1. Тетрис", "2. Пинг-Понг", "3. Спейс Инвейдерс", "4. Змейка", "5. Сапёр"]
+    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 100))
+    for i, text in enumerate(games):
+        rendered = font.render(text, True, WHITE if i == selected else (100, 100, 100))
+        screen.blit(rendered, (WIDTH // 2 - rendered.get_width() // 2, 200 + i * 50))
+    pygame.display.flip()
+
+# Экран правил
+def draw_rules(game):
+    screen.fill(BLACK)
+    rules_dict = {
+        "tetris": ["Тетрис", "Стрелка влево/вправо - движение", "Стрелка вниз - ускорение", "Стрелка вверх - поворот", "Очки: +10 за линию", "Enter - начать"],
+        "pong": ["Пинг-Понг", "Игрок 1: W/S", "Игрок 2: Стрелка вверх/вниз", "Очки: +1 за пропуск", "Enter - начать"],
+        "space_invaders": ["Спейс Инвейдерс", "Стрелка влево/вправо - движение", "Пробел - стрелять", "Очки: +10 за врага", "Enter - начать"],
+        "snake": ["Змейка", "Стрелки - движение", "Собирай еду, не врежься", "Очки: +1 за еду", "Enter - начать"],
+        "minesweeper": ["Сапёр", "ЛКМ - открыть", "ПКМ - флажок", "10 мин, найди все", "Enter - начать"]
+    }
+    rules = rules_dict[game]
+    for i, line in enumerate(rules):
+        text = font.render(line, True, WHITE)
+        screen.blit(text, (50, 50 + i * 40))
+    pygame.display.flip()
+
+# ---- Тетрис ----
+class Tetrimino:
+    def __init__(self):
+        self.shape = random.choice(SHAPES)
+        self.color = COLORS[SHAPES.index(self.shape)]
+        self.x = GRID_WIDTH // 2 - len(self.shape[0]) // 2
+        self.y = 0
+
+    def move(self, dx, dy):
+        self.x += dx
+        self.y += dy
+
+    def rotate(self):
+        self.shape = list(zip(*self.shape[::-1]))
+
+def check_collision(board, shape, offset_x, offset_y):
+    for y, row in enumerate(shape):
+        for x, cell in enumerate(row):
+            if cell:
+                new_x = x + offset_x
+                new_y = y + offset_y
+                if new_x < 0 or new_x >= GRID_WIDTH or new_y >= GRID_HEIGHT or (new_y >= 0 and board[new_y][new_x]):
+                    return True
+    return False
+
+def merge(board, tetrimino):
+    for y, row in enumerate(tetrimino.shape):
+        for x, cell in enumerate(row):
+            if cell:
+                board[y + tetrimino.y][x + tetrimino.x] = tetrimino.color
+
+def remove_lines(board):
+    lines = 0
+    for y in range(GRID_HEIGHT):
+        if all(board[y]):
+            del board[y]
+            board.insert(0, [0] * GRID_WIDTH)
+            lines += 1
+    return lines
+
+def draw_tetris(board, tetrimino, score):
+    screen.fill(BLACK)
+    for y, row in enumerate(tetrimino.shape):
+        for x, cell in enumerate(row):
+            if cell:
+                pygame.draw.rect(screen, tetrimino.color, ((x + tetrimino.x) * GRID_SIZE, (y + tetrimino.y) * GRID_SIZE, GRID_SIZE - 1, GRID_SIZE - 1))
+    for y, row in enumerate(board):
+        for x, cell in enumerate(row):
+            if cell:
+                pygame.draw.rect(screen, cell, (x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE - 1, GRID_SIZE - 1))
+    score_text = font.render(f"Очки: {score}", True, WHITE)
+    screen.blit(score_text, (GRID_SIZE * GRID_WIDTH + 20, 20))
+
+def tetris_game():
+    board = [[0] * GRID_WIDTH for _ in range(GRID_HEIGHT)]
+    tetrimino = Tetrimino()
+    fall_time = 0
+    base_speed = 50
+    fall_speed = base_speed
+    score = 0
+    game_over = False
+
+    while not game_over:
+        fall_time += 1
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_LEFT:
+                    tetrimino.move(-1, 0)
+                    if check_collision(board, tetrimino.shape, tetrimino.x, tetrimino.y):
+                        tetrimino.move(1, 0)
+                if event.key == pygame.K_RIGHT:
+                    tetrimino.move(1, 0)
+                    if check_collision(board, tetrimino.shape, tetrimino.x, tetrimino.y):
+                        tetrimino.move(-1, 0)
+                if event.key == pygame.K_DOWN:
+                    tetrimino.move(0, 1)
+                    if check_collision(board, tetrimino.shape, tetrimino.x, tetrimino.y):
+                        tetrimino.move(0, -1)
+                if event.key == pygame.K_UP:
+                    old_shape = tetrimino.shape
+                    tetrimino.rotate()
+                    if check_collision(board, tetrimino.shape, tetrimino.x, tetrimino.y):
+                        tetrimino.shape = old_shape
+
+        if fall_time >= fall_speed:
+            tetrimino.move(0, 1)
+            if check_collision(board, tetrimino.shape, tetrimino.x, tetrimino.y):
+                tetrimino.move(0, -1)
+                merge(board, tetrimino)
+                lines = remove_lines(board)
+                score += lines * 10
+                fall_speed = max(10, base_speed - score // 50)
+                tetrimino = Tetrimino()
+                if check_collision(board, tetrimino.shape, tetrimino.x, tetrimino.y):  # Проверка на конец игры
+                    game_over = True
+            fall_time = 0
+
+        draw_tetris(board, tetrimino, score)
+        pygame.display.flip()
+        clock.tick(60)
+    # Экран конца игры
+    screen.fill(BLACK)
+    end_text = font.render(f"Игра окончена! Очки: {score}", True, WHITE)
+    screen.blit(end_text, (WIDTH // 2 - end_text.get_width() // 2, HEIGHT // 2))
+    pygame.display.flip()
+    pygame.time.wait(2000)
+
+# ---- Пинг-Понг ----
+def draw_pong(paddle1, paddle2, ball, score1, score2):
+    screen.fill(BLACK)
+    pygame.draw.rect(screen, WHITE, paddle1)
+    pygame.draw.rect(screen, WHITE, paddle2)
+    pygame.draw.ellipse(screen, WHITE, ball)
+    score_text = font.render(f"{score1} : {score2}", True, WHITE)
+    screen.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, 20))
+
+def pong_game():
+    paddle1 = pygame.Rect(50, HEIGHT // 2 - 50, 10, 100)
+    paddle2 = pygame.Rect(WIDTH - 60, HEIGHT // 2 - 50, 10, 100)
+    ball = pygame.Rect(WIDTH // 2 - 15, HEIGHT // 2 - 15, 30, 30)
+    ball_speed = [5, 5]
+    paddle_speed = 5
+    score1 = 0
+    score2 = 0
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return
+
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_w] and paddle1.top > 0:
+            paddle1.y -= paddle_speed
+        if keys[pygame.K_s] and paddle1.bottom < HEIGHT:
+            paddle1.y += paddle_speed
+        if keys[pygame.K_UP] and paddle2.top > 0:
+            paddle2.y -= paddle_speed
+        if keys[pygame.K_DOWN] and paddle2.bottom < HEIGHT:
+            paddle2.y += paddle_speed
+
+        ball.x += ball_speed[0]
+        ball.y += ball_speed[1]
+
+        if ball.top <= 0 or ball.bottom >= HEIGHT:
+            ball_speed[1] = -ball_speed[1]
+        if ball.colliderect(paddle1) or ball.colliderect(paddle2):
+            ball_speed[0] = -ball_speed[0]
+
+        if ball.left <= 0:
+            score2 += 1
+            ball.center = (WIDTH // 2, HEIGHT // 2)
+            ball_speed[0] = 5
+        if ball.right >= WIDTH:
+            score1 += 1
+            ball.center = (WIDTH // 2, HEIGHT // 2)
+            ball_speed[0] = -5
+
+        draw_pong(paddle1, paddle2, ball, score1, score2)
+        pygame.display.flip()
+        clock.tick(60)
+
+# ---- Спейс Инвейдерс ----
+def space_invaders_game():
+    player = pygame.Rect(WIDTH // 2 - 25, HEIGHT - 50, 50, 20)
+    bullets = []
+    enemies = [pygame.Rect(x, y, 30, 30) for x in range(50, WIDTH - 50, 60) for y in range(50, 150, 40)]
+    enemy_speed = 1
+    score = 0
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                bullets.append(pygame.Rect(player.centerx - 2, player.y, 4, 10))
+
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT] and player.left > 0:
+            player.x -= 5
+        if keys[pygame.K_RIGHT] and player.right < WIDTH:
+            player.x += 5
+
+        for bullet in bullets[:]:
+            bullet.y -= 10
+            if bullet.y < 0:
+                bullets.remove(bullet)
+
+        for enemy in enemies[:]:
+            enemy.x += enemy_speed
+            if enemy.left <= 0 or enemy.right >= WIDTH:
+                enemy_speed = -enemy_speed
+                for e in enemies:
+                    e.y += 20
+            for bullet in bullets[:]:
+                if bullet.colliderect(enemy):
+                    enemies.remove(enemy)
+                    bullets.remove(bullet)
+                    score += 10
+                    break
+            if enemy.colliderect(player) or enemy.y >= HEIGHT:
+                screen.fill(BLACK)
+                end_text = font.render(f"Игра окончена! Очки: {score}", True, WHITE)
+                screen.blit(end_text, (WIDTH // 2 - end_text.get_width() // 2, HEIGHT // 2))
+                pygame.display.flip()
+                pygame.time.wait(2000)
+                return
+
+        screen.fill(BLACK)
+        pygame.draw.rect(screen, WHITE, player)
+        for bullet in bullets:
+            pygame.draw.rect(screen, RED, bullet)
+        for enemy in enemies:
+            pygame.draw.rect(screen, GREEN, enemy)
+        score_text = font.render(f"Очки: {score}", True, WHITE)
+        screen.blit(score_text, (20, 20))
+        pygame.display.flip()
+        clock.tick(60)
+
+# ---- Змейка ----
+def snake_game():
+    snake = [(WIDTH // 2, HEIGHT // 2)]
+    direction = (GRID_SIZE, 0)
+    food = pygame.Rect(random.randrange(0, WIDTH, GRID_SIZE), random.randrange(0, HEIGHT, GRID_SIZE), GRID_SIZE, GRID_SIZE)
+    score = 0
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP and direction != (0, GRID_SIZE):
+                    direction = (0, -GRID_SIZE)
+                elif event.key == pygame.K_DOWN and direction != (0, -GRID_SIZE):
+                    direction = (0, GRID_SIZE)
+                elif event.key == pygame.K_LEFT and direction != (GRID_SIZE, 0):
+                    direction = (-GRID_SIZE, 0)
+                elif event.key == pygame.K_RIGHT and direction != (-GRID_SIZE, 0):
+                    direction = (GRID_SIZE, 0)
+
+        head = (snake[0][0] + direction[0], snake[0][1] + direction[1])
+        if head[0] < 0 or head[0] >= WIDTH or head[1] < 0 or head[1] >= HEIGHT or head in snake:
+            screen.fill(BLACK)
+            end_text = font.render(f"Игра окончена! Очки: {score}", True, WHITE)
+            screen.blit(end_text, (WIDTH // 2 - end_text.get_width() // 2, HEIGHT // 2))
+            pygame.display.flip()
+            pygame.time.wait(2000)
+            return
+
+        snake.insert(0, head)
+        if pygame.Rect(head[0], head[1], GRID_SIZE, GRID_SIZE).colliderect(food):
+            score += 1
+            food = pygame.Rect(random.randrange(0, WIDTH, GRID_SIZE), random.randrange(0, HEIGHT, GRID_SIZE), GRID_SIZE, GRID_SIZE)
+        else:
+            snake.pop()
+
+        screen.fill(BLACK)
+        for segment in snake:
+            pygame.draw.rect(screen, GREEN, (segment[0], segment[1], GRID_SIZE - 1, GRID_SIZE - 1))
+        pygame.draw.rect(screen, RED, food)
+        score_text = font.render(f"Очки: {score}", True, WHITE)
+        screen.blit(score_text, (20, 20))
+        pygame.display.flip()
+        clock.tick(10)
+
+# ---- Сапёр ----
+def minesweeper_game():
+    GRID_SIZE_MS = 30
+    GRID_WIDTH_MS, GRID_HEIGHT_MS = 10, 10
+    MINES = 10
+    board = [[0] * GRID_WIDTH_MS for _ in range(GRID_HEIGHT_MS)]
+    revealed = [[False] * GRID_WIDTH_MS for _ in range(GRID_HEIGHT_MS)]
+    flags = [[False] * GRID_WIDTH_MS for _ in range(GRID_HEIGHT_MS)]
+
+    mines = random.sample([(x, y) for x in range(GRID_WIDTH_MS) for y in range(GRID_HEIGHT_MS)], MINES)
+    for x, y in mines:
+        board[y][x] = -1
+    for y in range(GRID_HEIGHT_MS):
+        for x in range(GRID_WIDTH_MS):
+            if board[y][x] != -1:
+                board[y][x] = sum(1 for dy in [-1, 0, 1] for dx in [-1, 0, 1] if 0 <= y + dy < GRID_HEIGHT_MS and 0 <= x + dx < GRID_WIDTH_MS and board[y + dy][x + dx] == -1)
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                x, y = event.pos[0] // GRID_SIZE_MS, event.pos[1] // GRID_SIZE_MS
+                if event.button == 1 and not flags[y][x]:  # ЛКМ
+                    if board[y][x] == -1:
+                        screen.fill(BLACK)
+                        end_text = font.render("Вы проиграли!", True, WHITE)
+                        screen.blit(end_text, (WIDTH // 2 - end_text.get_width() // 2, HEIGHT // 2))
+                        pygame.display.flip()
+                        pygame.time.wait(2000)
+                        return
+                    revealed[y][x] = True
+                elif event.button == 3:  # ПКМ
+                    flags[y][x] = not flags[y][x]
+
+        if all(revealed[y][x] or board[y][x] == -1 for y in range(GRID_HEIGHT_MS) for x in range(GRID_WIDTH_MS)):
+            screen.fill(BLACK)
+            end_text = font.render("Вы выиграли!", True, WHITE)
+            screen.blit(end_text, (WIDTH // 2 - end_text.get_width() // 2, HEIGHT // 2))
+            pygame.display.flip()
+            pygame.time.wait(2000)
+            return
+
+        screen.fill(BLACK)
+        for y in range(GRID_HEIGHT_MS):
+            for x in range(GRID_WIDTH_MS):
+                rect = (x * GRID_SIZE_MS, y * GRID_SIZE_MS, GRID_SIZE_MS - 1, GRID_SIZE_MS - 1)
+                if flags[y][x]:
+                    pygame.draw.rect(screen, RED, rect)
+                elif revealed[y][x]:
+                    pygame.draw.rect(screen, (100, 100, 100), rect)
+                    if board[y][x] > 0:
+                        text = font.render(str(board[y][x]), True, WHITE)
+                        screen.blit(text, (x * GRID_SIZE_MS + 5, y * GRID_SIZE_MS))
+                else:
+                    pygame.draw.rect(screen, WHITE, rect)
+        pygame.display.flip()
+        clock.tick(60)
+
+# Основной цикл
+def main():
+    selected = 0
+    in_menu = True
+    in_rules = False
+    game = None
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return
+            if event.type == pygame.KEYDOWN:
+                if in_menu:
+                    if event.key == pygame.K_DOWN:
+                        selected = (selected + 1) % 5
+                    if event.key == pygame.K_UP:
+                        selected = (selected - 1) % 5
+                    if event.key == pygame.K_RETURN:
+                        in_menu = False
+                        in_rules = True
+                        game = ["tetris", "pong", "space_invaders", "snake", "minesweeper"][selected]
+                elif in_rules and event.key == pygame.K_RETURN:
+                    in_rules = False
+                    if game == "tetris":
+                        tetris_game()
+                    elif game == "pong":
+                        pong_game()
+                    elif game == "space_invaders":
+                        space_invaders_game()
+                    elif game == "snake":
+                        snake_game()
+                    elif game == "minesweeper":
+                        minesweeper_game()
+                    in_menu = True
+
+        if in_menu:
+            draw_menu(selected)
+        elif in_rules:
+            draw_rules(game)
+        clock.tick(60)
+
+if __name__ == "__main__":
+    main()
